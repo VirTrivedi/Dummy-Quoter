@@ -154,6 +154,10 @@ int main(int argc, char *argv[]) {
         uint64_t processed_fills = 0;
         uint64_t last_ts = 0;
 
+        // Add a variable to track the most recent valid book top
+        book_top_t most_recent_book_top;
+        bool have_valid_book_top = false;
+
         // Process events in timestamp order
         while (!event_queue.empty()) {
             auto event = event_queue.top();
@@ -161,8 +165,17 @@ int main(int argc, char *argv[]) {
             
             // Process based on event type
             if (event->type == EventType::BOOK_TOP) {
-                tops_processor.processSingleBookTop(event->book_top);
-                processed_tops++;
+                if (event->book_top.top_level.ask_nanos != INT64_MAX &&
+                    event->book_top.top_level.bid_nanos != INT64_MAX) {
+
+                    tops_processor.processSingleBookTop(event->book_top);
+                    processed_tops++;
+                
+                    most_recent_book_top = event->book_top;
+                    have_valid_book_top = true;
+                } else {
+                    std::cerr << "Warning: Invalid book top detected, skipping..." << std::endl;
+                }
                 
                 if (tops_file.read(reinterpret_cast<char*>(&top), sizeof(book_top_t))) {
                     event_queue.push(std::make_shared<MarketDataEvent>(top.ts, top));
@@ -193,7 +206,13 @@ int main(int argc, char *argv[]) {
         std::cout << "Processing complete. Processed " << processed_tops 
                   << " tops and " << processed_fills << " fills." << std::endl;
         std::cout << "Orders written to: " << output_orders_file << std::endl;
-
+        
+        // Calculate end-of-day PnL using the last book top
+        if (have_valid_book_top) {            
+            quoter.calculateEndOfDayPnL(most_recent_book_top);
+        } else {
+            std::cerr << "Error: No book tops were processed, cannot calculate PnL" << std::endl;
+        }        
         // Close the files
         tops_file.close();
         fills_file.close();

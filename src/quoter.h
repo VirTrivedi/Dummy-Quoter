@@ -6,6 +6,7 @@
 #include <string>
 #include <fstream>
 #include <map>
+#include <unordered_map>
 #include "types/market_data_types.h"
 
 class Quoter {
@@ -20,6 +21,9 @@ public:
                     uint64_t mdTs, int64_t priceNanos, uint32_t quantity, 
                     bool isBid, bool isPostOnly = true);
     void setSymbolId(uint64_t symbolId);
+    
+    void calculateEndOfDayPnL(const book_top_t& finalBookTop);
+    void trackFill(uint64_t orderId, int64_t price_nanos, uint32_t quantity, bool isBid);
 
 private:
     std::string outputFilePath_;
@@ -31,7 +35,18 @@ private:
     std::map<int64_t, uint64_t> bidOrders_;
     std::map<int64_t, uint64_t> askOrders_;
     
-    void updateQuotes(const book_top_t& bookTop);
-};
+    // Data structure for orders
+    struct OrderInfo {
+        uint64_t orderId;
+        int64_t price_nanos;
+        uint32_t quantity;
+        uint32_t filled_quantity;
+        bool is_bid;
+    };
+    
+    // Track all orders placed
+    std::unordered_map<uint64_t, OrderInfo> allOrders_;
+    
+    void updateQuotes(const book_top_t& bookTop);};
 
 #endif
